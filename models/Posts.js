@@ -1,21 +1,3 @@
-// const mongoose = require("mongoose");
-
-// const postSchema = new mongoose.Schema({
-//   title: { type: String, required: true },
-//   content: { type: String, required: true },
-//   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Reference to User model
-//   image: { type: String },
-//   createdAt: { type: Date, default: Date.now },
-//   updatedAt: { type: Date, default: Date.now },
-// });
-
-// postSchema.pre('save', function(next) {
-//   this.updatedAt = Date.now();
-//   next();
-// });
-
-// const Post = mongoose.model('Post', postSchema);
-// module.exports = { postModel: Post };
 
 
 const mongoose = require('mongoose'); 
@@ -26,7 +8,7 @@ const postSchema = new mongoose.Schema({
   image: { type: String },
   comments: [
     {
-      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User',required: true },
       comment: { type: String, required: true },
       timestamp: { type: Date, default: Date.now },
     },

@@ -5,6 +5,7 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['admin', 'faculty', 'student'], default: 'student' },
+  registeredEvents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Event' }], 
 });
 
 const userModel = mongoose.model('User', UserSchema);

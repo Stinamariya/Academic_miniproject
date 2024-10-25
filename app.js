@@ -117,65 +117,39 @@ app.post("/Login", async (req, res) => {
 
 
 
+// Middleware to check if the user is an admin
+const isAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ status: 'Access denied' });
+  }
+  next();
+};
+
 // Get all users (admin only)
-app.get('/api/users', authenticateToken, async (req, res) => {
+app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
   try {
-      const users = await userModel.find({});
-      res.json(users);
+    const users = await userModel.find({});
+    res.json(users);
   } catch (error) {
-      res.status(500).json({ status: 'Error fetching users', error: error.message });
-  }
-});
-
-// Create a new user (admin only)
-app.post('/api/users', authenticateToken, async (req, res) => {
-  const { username, email, password, role } = req.body;
-
-  try {
-    const hashedPassword = bcrypt.hashSync(password, 10);
-    const newUser = new userModel({ username, email, password: hashedPassword, role });
-      await newUser.save();
-      res.status(201).json({ status: 'User created successfully' });
-  } catch (error) {
-      res.status(400).json({ status: 'Error creating user', error: error.message });
-  }
-});
-
-// Update a user (admin only)
-app.put('/api/users/:id', authenticateToken, async (req, res) => {
-  const { username, email, role } = req.body;
-
-  try {
-      const updatedUser = await userModel.findByIdAndUpdate(
-          req.params.id,
-          { username, email, role },
-          { new: true }
-      );
-
-      if (!updatedUser) {
-          return res.status(404).json({ status: 'User not found' });
-      }
-
-      res.json({ status: 'User updated successfully', user: updatedUser });
-  } catch (error) {
-      res.status(400).json({ status: 'Error updating user', error: error.message });
+    res.status(500).json({ status: 'Error fetching users', error: error.message });
   }
 });
 
 // Delete a user (admin only)
-app.delete('/api/users/:id', authenticateToken, async (req, res) => {
+app.delete('/api/users/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
-      const deletedUser = await userModel.findByIdAndDelete(req.params.id);
+    const deletedUser = await userModel.findByIdAndDelete(req.params.id);
 
-      if (!deletedUser) {
-          return res.status(404).json({ status: 'User not found' });
-      }
+    if (!deletedUser) {
+      return res.status(404).json({ status: 'User not found' });
+    }
 
-      res.json({ status: 'User deleted successfully' });
+    res.json({ status: 'User deleted successfully' });
   } catch (error) {
-      res.status(500).json({ status: 'Error deleting user', error: error.message });
+    res.status(500).json({ status: 'Error deleting user', error: error.message });
   }
 });
+
 
 
 
@@ -228,9 +202,9 @@ app.get('/api/Posts/:id', async (req, res) => {
   }
 });
 
-// Edit Post
+//Edit post
 app.put('/api/editPost/:id', upload.single('image'), authenticateToken, async (req, res) => {
-  const { title, content } = req.body;
+  const { title, content, comments } = req.body; // Assuming comments is still part of the request
   const postId = req.params.id;
 
   try {
@@ -245,8 +219,15 @@ app.put('/api/editPost/:id', upload.single('image'), authenticateToken, async (r
       return res.status(403).json({ status: "You do not have permission to edit this post" });
     }
 
+    // Update the post's title and content
     post.title = title || post.title;
     post.content = content || post.content;
+
+    // Only update comments if provided
+    if (comments) {
+      // Check if comments is a valid array or handle as needed
+      post.comments = comments; // Or handle parsing as necessary
+    }
 
     // Update the image only if a new file is uploaded
     if (req.file) {
@@ -325,41 +306,67 @@ app.get('/user/:userId', authenticateToken, async (req, res) => {
 
 // Add Comment
 app.post('/api/Posts/:id/comments', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const { comment } = req.body;
+  // console.log('User ID:', req.user._id);  // Ensure this is not undefined
+  // console.log('Comment:', req.body.comment);
+  // const { id } = req.params;
+  // const { comment } = req.body;
   
 
-  if (!comment) {
-    return res.status(400).json({ status: "Comment is required" });
-  }
+  // if (!comment) {
+  //   return res.status(400).json({ status: "Comment is required" });
+  // }
 
   try {
-    const post = await postModel.findById(id);
+    const post = await postModel.findById(req.params.id);
     if (!post) {
       return res.status(404).json({ status: "Post not found" });
     }
 
     // Create a new comment object
     const newComment = {
-      userId: req.user.id, // Get userId from the token
-      comment,
+      userId: req.user._id, // Get userId from the token
+      comment:req.body.comment,
       timestamp: Date.now(),
     };
 
     // Push the new comment into the comments array
     post.comments.push(newComment);
     await post.save();
+    console.log('Received comment data:', req.body);
+
+    // Log the entire post object, including all comments
+    console.log('Post after adding comment:', JSON.stringify(post, null, 2));
 
     res.status(201).json({ status: "Comment added successfully", post });
   } catch (error) {
     console.error("Error adding comment:", error);
-    if (error.name === "ValidationError") {
-      return res.status(400).json({ status: "Validation error", error: error.message });
-    }
     res.status(500).json({ status: "Error adding comment", error: error.message });
   }
 });
 
+
+    
+
+
+app.get('/GetComments/:postId', async (req, res) => {
+  
+
+  try {
+    // Find the post by its ID and populate the userId inside the comments
+    const post = await postModel.findById(req.params.postId)
+      .populate('comments.userId', 'username');
+    res.status(200).json(post.comments);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    console.log('Comments fetched successfully:', JSON.stringify(post.comments, null, 2));
+    res.status(200).json(post.comments); // Respond with the comments array
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    res.status(500).json({ message: 'Error fetching comments', error: error.message });
+  }
+});
 
 // Combined endpoint for fetching recent posts and upcoming events
 app.get('/api/dashboard/data', async (req, res) => {
@@ -372,7 +379,7 @@ app.get('/api/dashboard/data', async (req, res) => {
       .exec();
 
     // Fetch upcoming events
-    const upcomingEvents = await EventModel.find({ eventDatedate: { $gte: new Date() } }) // Fetch events that are on or after the current date
+    const upcomingEvents = await EventModel.find({ eventDate: { $gte: new Date() } }) // Fetch events that are on or after the current date
   .sort({ eventDate: 1 }) // Sort by date, upcoming first
   .exec();
 
@@ -436,7 +443,7 @@ app.get('/api/posts/search/:searchBy', async (req, res) => {
 // Create an event
 app.post('/createEvent', authenticateToken, async (req, res) => {
   try {
-    const { eventName, description, eventDate, eventTime } = req.body;
+    const { eventName, description, eventDate, eventTime,venue } = req.body;
 
     // Create the event object
     const eventData = {
@@ -444,6 +451,7 @@ app.post('/createEvent', authenticateToken, async (req, res) => {
       description,
       eventDate,
       eventTime,
+      venue,
       createdAt: new Date(),
     };
 
@@ -474,18 +482,7 @@ app.get('/ViewEvents',  async (req, res) => {
   }
 });
 
-// Endpoint to get all events and their respective registrants
-// app.get('/api/events/registrations', async (req, res) => {
-//   try {
-    
-//       const events = await EventModel.find().populate('registrants.userId', 'username email'); // Populate user details
-//       console.log('Events fetched successfully:', JSON.stringify(events, null, 2));
-//       res.json(events);
-//   } catch (error) {
-//     console.error('Error fetching events:', error); // Log the error
-//       res.status(500).json({ error: 'Server Error' });
-//   }
-// });
+
 
 
 app.get('/ViewEvents/:eventId/registrants', authenticateToken, async (req, res) => {
@@ -525,7 +522,7 @@ app.post('/api/events/:eventId/register',authenticateToken, async (req, res) => 
     // Add the user to registrants
     event.registrants.push({ userId });
     await event.save();
-
+    await userModel.findByIdAndUpdate(userId, { $push: { registeredEvents: eventId } });
     res.status(200).json({ message: 'Registration successful', event });
   } catch (error) {
     console.error('Error registering for event:', error);
@@ -535,29 +532,33 @@ app.post('/api/events/:eventId/register',authenticateToken, async (req, res) => 
       
 
 
-// View Registered Events for Student
-app.get('/api/students/:id/registered-events', authenticateToken, async (req, res) => {
+
+app.get('/api/student/:id/events', async (req, res) => {
+  const studentId = req.params.id;
+
+  // Fetch the registered events for this student
   try {
-    // Verify if the user accessing this route is the student or admin
-    if (req.user.role !== 'student') {
-      return res.status(403).json({ message: 'Access denied. Only students or admin can access this resource.' });
-    }
-
-    // Ensure the student is accessing their own data or admin is accessing
-    if (req.user._id.toString() !== req.params.id) {
-      return res.status(403).json({ message: 'Access denied. You can only view your own registered events.' });
-    }
-
-    // Find events where the student is registered
-    const registeredEvents = await EventModel.find({ 'registrants.userId': req.params.id });
-
-    // Return the registered events
-    res.status(200).json(registeredEvents);
+      const events = await EventModel.find({ 'registrants.userId': studentId }).populate('registrants.userId', 'name email');
+      res.status(200).json(events);
+      
   } catch (error) {
-    console.error('Error fetching registered events:', error);
-    res.status(500).json({ status: 'Error fetching registered events', error: error.message });
+      console.error('Error fetching events:', error);
+      res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+
+// Function to get available events (student view)
+const getAvailableEvents = async (req, res) => {
+  try {
+    const events = await Event.find({
+      date: { $gte: new Date() } // Fetch only non-expired events for students
+    });
+    res.status(200).json(events);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 
 // // Sample function to register a user for an event
 // async function registerUserForEvent(eventId, userId) {
@@ -595,7 +596,7 @@ console.log('Starting the expired events deletion interval...');
 setInterval(() => {
   console.log('Running task to delete expired events...');
   deleteExpiredEvents();
-}, 360000);//every 10 seconds to test
+}, 1000);//every 10 seconds to test
 
 
 
